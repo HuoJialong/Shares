@@ -11,11 +11,12 @@ ts.set_token(token)
 pro = ts.pro_api()
 
 timestemp = 0  # 返回数据的交易日距最近交易日的日期
-# write = 1
-write = 0
+write = 1
 delta = [20, 120, 250]     # 相对于delta个交易日的数据得到relative strength
-industry_list = ['黄金', '半导体', '汽车零部件']
-index = 3
+industry_list = ['黄金', '半导体', '汽车零部件',
+                 '汽车整车', '造纸', '银行',
+                 '保险', '贸易','饮料制造']
+index = 9
 industry2 = industry_list[index-1]
 index2 = pro.index_classify(level='L2', src='SW')
 

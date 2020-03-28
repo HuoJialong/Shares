@@ -1,7 +1,6 @@
 import tushare as ts
 import pandas as pd
 import datetime
-import time
 import pymysql
 from sqlalchemy import create_engine
 
@@ -12,7 +11,7 @@ pro = ts.pro_api()
 day = 90
 write = 1
 index2 = pro.index_classify(level='L2', src='SW')
-industry_list = ['黄金', '半导体', '银行', '保险']
+industry_list = ['饮料制造', '汽车零部件']
 index2 = index2[index2['industry_name'].isin(industry_list)]
 
 

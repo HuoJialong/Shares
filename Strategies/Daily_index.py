@@ -6,10 +6,10 @@ token = '9585083c3cb3cc48af1ac4401d6be82cf738b23f1eeb31ce284011e5'
 ts.set_token(token)
 pro = ts.pro_api()
 
-day = 20
+day = 90
 index2 = pro.index_classify(level='L2', src='SW')
 # index2 = index2[~index2['industry_name'].isin(['动物保健', '园区开发', '石油开采', '水务', '渔业'])]
-index2 = index2[index2['industry_name'] == '石油开采']
+index2 = index2[index2['industry_name'] == '银行']
 
 
 def trade_date_list():
@@ -49,5 +49,6 @@ def daily_index(index2, day=0):
 
 index_point = pd.DataFrame()
 for j in range(day):
-    temp = daily_index(index2=index2, day=j)
-    index_point = index_point.append(temp)
+    index_point = index_point.append(daily_index(index2=index2, day=j))
+
+index_point.to_excel(excel_writer="Daily_index.xlsx", sheet_name=index2['industry_name'].values[0], index=False)

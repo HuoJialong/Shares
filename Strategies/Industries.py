@@ -11,13 +11,25 @@ ts.set_token(token)
 pro = ts.pro_api()
 
 timestemp = 0  # 返回数据的交易日距最近交易日的日期
-write = 1
+write = 0
 delta = [20, 120, 250]     # 相对于delta个交易日的数据得到relative strength
-industry_list = ['黄金', '半导体', '汽车零部件',
-                 '汽车整车', '造纸', '银行',
-                 '保险', '贸易','饮料制造']
-index = 9
-industry2 = industry_list[index-1]
+industry_list = \
+    [
+        '石油开采', '石油化工', '黄金',
+
+        '高低压设备', '专用设备', '汽车整车',
+
+        '贸易', '饮料制造', '食品加工', '汽车零部件',
+
+        '证券', '保险', '白色家电', '造纸',
+
+        '半导体', '元件', '电子制造',
+
+        '计算机设备', '计算机应用', '通信运营',
+
+        '通信设备', '银行'
+    ]
+
 index2 = pro.index_classify(level='L2', src='SW')
 
 
@@ -96,15 +108,15 @@ def relative_strength(delta, timestemp=0):
     return stock[order]
 
 
-def stock_info(ts_code, timestemp=0):
+def stock_info(timestemp=0):
 
-    stock_info1 = pro.daily(ts_code=ts_code, trade_date=trade_date_list()[timestemp],
+    stock_info1 = pro.daily(ts_code='', trade_date=trade_date_list()[timestemp],
                             fields='ts_code,open,high,low,close,pre_close,vol,amount')
     stock_info1['change(%)'] = stock_info1['close']/stock_info1['pre_close']*100-100
 
     stock_info2 = pro.stock_basic(exchange='', list_status='L',
                                   fields='ts_code,name,area,market,list_date')
-    stock_info3 = pro.daily_basic(ts_code=ts_code, trade_date=trade_date_list()[timestemp],
+    stock_info3 = pro.daily_basic(ts_code='', trade_date=trade_date_list()[timestemp],
                                   fields='ts_code, trade_date, turnover_rate_f,'
                                          'volume_ratio, pe,pe_ttm,pb,ps,ps_ttm,dv_ratio,dv_ttm,total_share,'
                                          'float_share,total_mv,circ_mv')
@@ -136,30 +148,23 @@ def stock_info(ts_code, timestemp=0):
     return stock[order]
 
 
-def index_member(industry2, timestemp=0):
-    index3 = pro.index_classify(level='L2', src='SW')
-    index_code = index3[index3['industry_name'] == industry2]['index_code'].values[0]
-    index3_member = pro.index_member(index_code=index_code, fields='index_code,con_code')
-    index3_member.columns = ['index_code', 'ts_code']
+def point_calculate(df):
+    df = df[['index_code', 'industry_name', 'trade_date', 'close', 'float_share']]
+    df['market'] = df['close'] * df['float_share']
+    result = pd.DataFrame()
+    index_code = df.drop_duplicates('index_code')
+    dates = df.drop_duplicates('trade_date')
+    for i in range(index_code.shape[0]):
+        for j in range(dates.shape[0]):
+            temp = df[df['index_code'] == index_code['index_code'].values[i]]
+            temp = temp[temp['trade_date'] == dates['trade_date'].values[j]]
+            sum_market = temp['market'].sum()
+            sum_free_share = temp['float_share'].sum()
+            temp = temp[['index_code', 'industry_name', 'trade_date']][0:1]
+            temp['point'] = sum_market/sum_free_share
+            result = result.append(temp)
+    return result
 
-    name = []
-    for i in range(index3_member.shape[0]):
-        name.append(industry2)
-    col_name = index3_member.columns.tolist()
-    col_name.insert(1, 'industry2')
-    index3_member = index3_member.reindex(columns=col_name)
-    index3_member['industry2'] = name
-
-    info = pd.DataFrame()
-    for m in range(index3_member.shape[0]):
-        ts_code = index3_member['ts_code'].values[m]
-        temp = stock_info(ts_code=ts_code, timestemp=timestemp)
-        info = info.append(temp)
-
-    member = pd.merge(index3_member, info, how='left')
-    member= member.dropna(subset=["trade_date"])
-    member = member[~member['market'].isin(['创业板', '科创板'])]
-    return member
 
 
 def create_table(member, delta):
@@ -199,9 +204,30 @@ def write_data(member):
                      chunksize=10000, index=False)
 
 
-member = index_member(industry2=industry2, timestemp=timestemp)
+member = pd.DataFrame()
+for industry2 in industry_list:
+    temp = pro.index_member(index_code=index2[index2['industry_name'] == industry2]['index_code'].values[0],
+                            fields='index_code,con_code')
+    member = member.append(temp)
+member.columns = ['index_code', 'ts_code']
+member = pd.merge(member, index2[['index_code', 'industry_name']])
+
+info = stock_info(timestemp=timestemp)
+
 strength = relative_strength(delta=delta, timestemp=timestemp)
-stock = pd.merge(member, strength, how='left')
-if write != 0:
-    create_table(member=stock, delta=delta)
-    write_data(member=stock)
+
+data = pd.merge(member, info, how='left')
+data = pd.merge(data, strength, how='left')
+data.dropna(axis=0, how='any')
+
+point = point_calculate(data)
+
+
+
+
+
+#
+# stock = pd.merge(member, strength, how='left')
+# if write != 0:
+#     create_table(member=stock, delta=delta)
+#     write_data(member=stock)

@@ -8,10 +8,23 @@ token = '9585083c3cb3cc48af1ac4401d6be82cf738b23f1eeb31ce284011e5'
 ts.set_token(token)
 pro = ts.pro_api()
 
-day = 90
-write = 1
+day = 0
+write = 0
 index2 = pro.index_classify(level='L2', src='SW')
-industry_list = ['饮料制造', '汽车零部件']
+industry_list = [
+                 # '石油开采', '石油化工', '黄金',
+                 # '高低压设备', '专用设备', '汽车整车'
+
+                 # '汽车零部件', '白色家电', '造纸',
+                 # '贸易', '饮料制造', '食品加工'
+
+                 # '半导体', '元件', '电子制造',
+                 # '计算机制造', '计算机应用', '通信运营'
+
+                 # '通信设备', '银行'
+
+                 '证券', '保险'
+                 ]
 index2 = index2[index2['industry_name'].isin(industry_list)]
 
 

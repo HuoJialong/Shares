@@ -11,26 +11,13 @@ ts.set_token(token)
 pro = ts.pro_api()
 
 timestemp = 0  # 返回数据的交易日距最近交易日的日期
-write = 0
+write = 1
 delta = [20, 120, 250]     # 相对于delta个交易日的数据得到relative strength
-industry_list = \
-    [
-        '石油开采', '石油化工', '黄金',
-
-        '高低压设备', '专用设备', '汽车整车',
-
-        '贸易', '饮料制造', '食品加工', '汽车零部件',
-
-        '证券', '保险', '白色家电', '造纸',
-
-        '半导体', '元件', '电子制造',
-
-        '计算机设备', '计算机应用', '通信运营',
-
-        '通信设备', '银行'
-    ]
+days = 60
 
 index2 = pro.index_classify(level='L2', src='SW')
+industry_list = ['采掘服务', '园林工程', '林业', '动物保健', '其他休闲服务']
+industry_list = list(index2[~index2['industry_name'].isin(industry_list)]['industry_name'])
 
 
 def trade_date_list():
@@ -103,7 +90,7 @@ def relative_strength(delta, timestemp=0):
 
     stock.sort_values(by='strength%s' % delta3, ascending=False, inplace=True)
 
-    order = ['ts_code', 'growth%s' % delta1, 'strength%s' % delta1, 'growth%s' % delta2,
+    order = ['ts_code', 'name', 'trade_date', 'growth%s' % delta1, 'strength%s' % delta1, 'growth%s' % delta2,
              'strength%s' % delta2, 'growth%s' % delta3, 'strength%s' % delta3]
     return stock[order]
 
@@ -150,31 +137,53 @@ def stock_info(timestemp=0):
 
 def point_calculate(df):
     df = df[['index_code', 'industry_name', 'trade_date', 'close', 'float_share']]
-    df['market'] = df['close'] * df['float_share']
-    result = pd.DataFrame()
     index_code = df.drop_duplicates('index_code')
     dates = df.drop_duplicates('trade_date')
+    df.insert(5, 'market_value', df['close'] * df['float_share'])
+
+    result = pd.DataFrame()
     for i in range(index_code.shape[0]):
         for j in range(dates.shape[0]):
             temp = df[df['index_code'] == index_code['index_code'].values[i]]
             temp = temp[temp['trade_date'] == dates['trade_date'].values[j]]
-            sum_market = temp['market'].sum()
+            sum_market = temp['market_value'].sum()
             sum_free_share = temp['float_share'].sum()
             temp = temp[['index_code', 'industry_name', 'trade_date']][0:1]
-            temp['point'] = sum_market/sum_free_share
+            temp.insert(3, 'point', sum_market/sum_free_share)
             result = result.append(temp)
     return result
 
 
+member = pd.DataFrame()
+for industry2 in industry_list:
+    temp = pro.index_member(index_code=index2[index2['industry_name'] == industry2]['index_code'].values[0],
+                            fields='index_code,con_code')
+    member = member.append(temp)
+member.columns = ['index_code', 'ts_code']
+member = pd.merge(member, index2[['index_code', 'industry_name']])
 
-def create_table(member, delta):
+info = pd.DataFrame()
+strength = pd.DataFrame()
+for timestemp in range(days):
+    temp1 = stock_info(timestemp=timestemp)
+    info = info.append(temp1)
+    temp2 = relative_strength(delta=delta, timestemp=timestemp)
+    strength = strength.append(temp2)
+
+stock_daily = pd.merge(info, member, how='left')
+stock_daily = pd.merge(stock_daily, strength, on=['ts_code', 'trade_date', 'name'], how='left')
+stock_daily = stock_daily.dropna(axis=0, how='any')
+industry_daily = point_calculate(stock_daily)
+
+
+def create_table(delta):
     # ******************************** #
     #     创建表
     conn = pymysql.connect('localhost', 'root', 'password', 'stock')
     cursor = conn.cursor()
-    sql_create = """
-    CREATE TABLE IF NOT EXISTS `stock`.`%s` (
-    `index_code` VARCHAR(45) NOT NULL, `industry2` VARCHAR(45),
+    sql_create_stock_daily = """
+    CREATE TABLE IF NOT EXISTS `stock`.`stock_daily` (
+    `index_code` VARCHAR(45) NOT NULL, `industry_name` VARCHAR(45),
     `ts_code` VARCHAR(45) NOT NULL, `name` VARCHAR(45), `market` VARCHAR(45), `area` VARCHAR(45), 
     `total_mv` FLOAT, `circ_mv` FLOAT,`成交量/万手` FLOAT, 
     `成交额/亿` FLOAT, `trade_date` VARCHAR(45) NOT NULL, `涨跌幅` FLOAT,
@@ -187,47 +196,33 @@ def create_table(member, delta):
      `ps_ttm` FLOAT, `股息率` FLOAT, `股息率_ttm` FLOAT, 
     `换手率` FLOAT, `量比` FLOAT, `total_share` FLOAT,
     `float_share` FLOAT, `list_date` VARCHAR(45),    
-     PRIMARY KEY (`index_code`, `ts_code`, `trade_date`));""" % (member['industry2'].values[0],
-                                                                 delta[0], delta[0], delta[1],
+     PRIMARY KEY (`index_code`, `ts_code`, `trade_date`));""" % (delta[0], delta[0], delta[1],
                                                                  delta[1], delta[2], delta[2])
 
-    cursor.execute(sql_create)
+    sql_create_industry_daily = """
+    CREATE TABLE IF NOT EXISTS `stock`.`industry_daily` (
+    `index_code` VARCHAR(45) NOT NULL, 
+    `industry_name` VARCHAR(45),
+     `trade_date` VARCHAR(45)  NOT NULL,
+    `point` FLOAT,    
+     PRIMARY KEY (`index_code`, `trade_date`));"""
+
+    cursor.execute(sql_create_stock_daily)
+    cursor.execute(sql_create_industry_daily)
 
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def write_data(member):
+def write_data(stock_daily, industry_daily):
     engine = create_engine("mysql+pymysql://root:password@localhost/stock")
-    pd.io.sql.to_sql(member, '%s' % (member['industry2'].values[0]), engine, if_exists='append',
+    pd.io.sql.to_sql(stock_daily, 'stock_daily', engine, if_exists='append',
+                     chunksize=10000, index=False)
+    pd.io.sql.to_sql(industry_daily, 'industry_daily', engine, if_exists='append',
                      chunksize=10000, index=False)
 
 
-member = pd.DataFrame()
-for industry2 in industry_list:
-    temp = pro.index_member(index_code=index2[index2['industry_name'] == industry2]['index_code'].values[0],
-                            fields='index_code,con_code')
-    member = member.append(temp)
-member.columns = ['index_code', 'ts_code']
-member = pd.merge(member, index2[['index_code', 'industry_name']])
-
-info = stock_info(timestemp=timestemp)
-
-strength = relative_strength(delta=delta, timestemp=timestemp)
-
-data = pd.merge(member, info, how='left')
-data = pd.merge(data, strength, how='left')
-data.dropna(axis=0, how='any')
-
-point = point_calculate(data)
-
-
-
-
-
-#
-# stock = pd.merge(member, strength, how='left')
-# if write != 0:
-#     create_table(member=stock, delta=delta)
-#     write_data(member=stock)
+if write != 0:
+    create_table(delta=delta)
+    write_data(stock_daily=stock_daily, industry_daily=industry_daily)

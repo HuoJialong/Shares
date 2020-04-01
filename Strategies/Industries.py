@@ -13,7 +13,7 @@ pro = ts.pro_api()
 timestemp = 0  # 返回数据的交易日距最近交易日的日期
 write = 1
 delta = [20, 120, 250]     # 相对于delta个交易日的数据得到relative strength
-days = 60
+days = 61
 
 index2 = pro.index_classify(level='L2', src='SW')
 industry_list = ['采掘服务', '园林工程', '林业', '动物保健', '其他休闲服务']
@@ -125,13 +125,13 @@ def stock_info(timestemp=0):
                '股息率_ttm', 'total_share', 'float_share', 'total_mv', 'circ_mv'
                ]
     stock.columns = columns
+
     order = ['ts_code', 'name', 'area', 'total_mv', 'trade_date',
              '涨跌幅', 'close', 'pre_close', 'open', 'high', 'low', 'pe',
              'pe_ttm', 'pb', 'ps', 'ps_ttm', '股息率',
              '股息率_ttm', '成交量/万手', '成交额/亿', 'circ_mv',
              '换手率', '量比', 'total_share', 'float_share', 'market', 'list_date'
              ]
-
     return stock[order]
 
 
@@ -170,9 +170,12 @@ for timestemp in range(days):
     temp2 = relative_strength(delta=delta, timestemp=timestemp)
     strength = strength.append(temp2)
 
+info = info[~info['market'].isin(['科创板'])]  # 排除创业板的企业
+info = info[~info['market'].isin(['创业板'])]  # 排除创业板的企业
+
 stock_daily = pd.merge(info, member, how='left')
 stock_daily = pd.merge(stock_daily, strength, on=['ts_code', 'trade_date', 'name'], how='left')
-stock_daily = stock_daily.dropna(axis=0, how='any')
+stock_daily = stock_daily.dropna(subset=['index_code', 'industry_name', 'trade_date', 'close', 'float_share'])
 industry_daily = point_calculate(stock_daily)
 
 

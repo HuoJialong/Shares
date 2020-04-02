@@ -13,7 +13,7 @@ pro = ts.pro_api()
 timestemp = 0  # 返回数据的交易日距最近交易日的日期
 write = 1
 delta = [20, 120, 250]     # 相对于delta个交易日的数据得到relative strength
-days = 61
+days = 1
 
 index2 = pro.index_classify(level='L2', src='SW')
 industry_list = ['采掘服务', '园林工程', '林业', '动物保健', '其他休闲服务']
